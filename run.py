@@ -56,15 +56,10 @@ if __name__ == "__main__":
                         action="store_true", 
                         help="Test on one batch to debug")
     
-    parser.add_argument("--step", 
-                        default=1,
-                        type=int,
-                        help="Training step")
-    
     parser.add_argument("--rate", 
-                        default=0,
+                        default=6,
                         type=int,
-                        help="target bitrate | 5 bitrates [0-4]")
+                        help="target bitrate | 5 bitrates [0-6]")
     
     parser.add_argument("--num_workers", 
                             dest="num_workers", 
@@ -100,11 +95,11 @@ if __name__ == "__main__":
     if model_id =='dac':
         generator = models.GeneratorDAC(**generator_params)
 
-    elif model_id =='rdac':
-        generator = models.GeneratorRDAC(**generator_params) 
+    elif model_id =='hdac':
+        generator = models.GeneratorHDAC(**generator_params) 
 
-    elif model_id == 'rdac_t':
-        generator = models.GeneratorRDAC_T(**generator_params)
+    elif model_id == 'rdac':
+        generator = models.GeneratorRDAC(**generator_params)
     
     else:
         raise Exception("Unknown model architecture!! CHOOSE FROM : [dac,hdac,rdac,rdac_temporal,rdac_temporal_comp, rdac_temporal_comp_mv]")
@@ -129,7 +124,6 @@ if __name__ == "__main__":
         discriminator = None    
 
     dataset = utils.FramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
-
     if opt.mode == 'train':
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
@@ -141,7 +135,6 @@ if __name__ == "__main__":
         params = {  'project_id': opt.project_id,
                     'debug': opt.debug,
                     'model_id':model_id,
-                    'step': opt.step,
                     'checkpoint': opt.checkpoint, 
                     'log_dir': log_dir, 
                     'device_ids': opt.device_ids,

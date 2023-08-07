@@ -19,37 +19,18 @@ class PrepareOptimizers:
         return optimizer
     
     def get_rdac_optimizer(self, config={'lr':1e-4, 'lr_aux':1e-3},temporal=False, betas=(0.5, 0.999)):
-        if self.step_wise:
-            for param in self.generator.parameters():
-                param.requires_grad = False
+        gen_params = set(p for n, p in self.generator.named_parameters() if not n.endswith(".quantiles")) 
+        parameters = list(gen_params)+ list(self.kp_detector.parameters())
 
-            for param in self.kp_detector.parameters():
-                param.requires_grad = False
-
-            if temporal:
-                net = self.generator.tdc.train()
-            else:
-                net = self.generator.sdc.train()
-
-            parameters = set(p for n, p in net.named_parameters() if not n.endswith(".quantiles"))
-            aux_parameters = set(p for n, p in net.named_parameters() if n.endswith(".quantiles")) 
-
-            for param in parameters:
-                param.requires_grad = True
-
-            for param in aux_parameters:
-                param.requires_grad = True
-                
-        else:
-            gen_params = set(p for n, p in self.generator.named_parameters() if not n.endswith(".quantiles")) 
-            parameters = list(gen_params)+ list(self.kp_detector.parameters())
-
-            if temporal:
-                net = self.generator.tdc.train()
-            else:
-                net = self.generator.sdc.train()
-
-            aux_parameters = set(p for n, p in net.named_parameters() if n.endswith(".quantiles"))
+        
+        sdc_net = self.generator.sdc.train()
+        sdc_aux_parameters = set(p for n, p in sdc_net.named_parameters() if n.endswith(".quantiles"))
+        aux_parameters = list(sdc_aux_parameters)
+        if temporal:
+            tdc_net = self.generator.tdc.train()
+            tdc_aux_parameters = set(p for n, p in tdc_net.named_parameters() if n.endswith(".quantiles"))
+            aux_parameters += list(tdc_aux_parameters)
+        
         
         optimizer = torch.optim.AdamW(parameters, lr=config['lr'])
         aux_optimizer = torch.optim.AdamW(aux_parameters, lr=config['lr_aux'])
@@ -67,19 +48,16 @@ def train(config,dataset,generator, kp_detector,discriminator,**kwargs ):
     adversarial_training = train_params['adversarial_training']
 
     # create optimizers for generator, kp_detector and discriminator
-    step = kwargs['step']
     step_wise = config['train_params']['step_wise']
     prepare = PrepareOptimizers(generator, kp_detector, step_wise=step_wise)
 
-    if step == 0:
+    if kwargs['model_id'] in ['dac', 'hdac']:
         optimizer = prepare.get_animation_optimizer()
         aux_optimizer = None
-    elif step == 1:
+    elif kwargs['model_id'] == 'rdac':
         # Train the spatial difference coder
-        optimizer, aux_optimizer = prepare.get_rdac_optimizer()
-    elif step in [2,3]:
-        # Train TDC but with/without motion compensation using deformation predicted
-        optimizer, aux_optimizer = prepare.get_rdac_optimizer(temporal=True)
+        temporal_learning = config['model_params']['generator_params']['temporal_residual_learning']
+        optimizer, aux_optimizer = prepare.get_rdac_optimizer(temporal=temporal_learning)
     else:
         raise NotImplementedError("Unknown training step")
 
@@ -110,13 +88,13 @@ def train(config,dataset,generator, kp_detector,discriminator,**kwargs ):
 
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=kwargs['num_workers'], drop_last=True, pin_memory=True)
 
-    with utils.Logger(log_dir=kwargs['log_dir'], visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
+    with utils.Logger(log_dir=kwargs['log_dir'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
         for epoch in trange(start_epoch, train_params['num_epochs']):
             x, generated = None, None
             for x in dataloader:
                 if torch.cuda.is_available():
                     for item in x:
-                        x[item] = x[item].cuda()                         
+                        x[item] = x[item].cuda()                       
                 params = {**kwargs}
                 losses_generator, generated = generator_full(x, **params)
                 losses_ = {} 
@@ -135,10 +113,9 @@ def train(config,dataset,generator, kp_detector,discriminator,**kwargs ):
                 optimizer.zero_grad()
 
                 if aux_optimizer is not None:
-                    if step==1:
-                        aux_loss = generator.sdc.aux_loss()
-                    elif step in [2,3]:
-                        aux_loss = generator.tdc.aux_loss()
+                    aux_loss = generator.sdc.aux_loss()
+                    if temporal_learning:
+                        aux_loss += generator.tdc.aux_loss()
 
                     aux_loss.backward()
                     aux_optimizer.step()

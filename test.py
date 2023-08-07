@@ -4,13 +4,13 @@ import torch
 import imageio
 import numpy as np
 from tqdm import trange
-from metrics_module import Metrics
+from metrics import Metrics
 from utils.visualizer import Visualizer
 from torch.utils.data import DataLoader
 from image_coders import ImageCoder
 from coding_utils import *
 from typing import Protocol
-from entropy_coders import KpEntropyCoder, ResEntropyCoder
+from entropy_coders import KpEntropyCoder
 
 class Generator(Protocol):
     def forward(self):

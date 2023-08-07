@@ -15,7 +15,6 @@ torch
 torchvision
 tqdm
 wandb
-imageio-ffmpeg
 av
 compressai
 psnr-hvm

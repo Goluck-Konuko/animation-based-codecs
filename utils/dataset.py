@@ -14,10 +14,9 @@ class FramesDataset(Dataset):
       - '.mp4' or '.gif'
       - folder with all frames
     """
-    def __init__(self, train_dir: str, test_dir:str, frame_shape: tuple =(256, 256, 3), is_train: bool=True,
+    def __init__(self, train_dir: str, test_dir:str, base_layer_dir:str=None, frame_shape: tuple =(256, 256, 3), is_train: bool=True,
                  base_layer: bool=False,  augmentation_params: Dict[str, Any]=None, 
-                 num_sources: int=2, use_saliency_map: bool=False,
-                 target_delta: int=2, **kwargs):
+                 num_sources: int=2, target_delta: int=2, **kwargs):
         print("LOADING DATASET..")
         self.is_train = is_train
         self.frame_shape = tuple(frame_shape)
@@ -31,6 +30,8 @@ class FramesDataset(Dataset):
         self.num_sources = num_sources
 
         self.base_layer = base_layer
+        if self.base_layer:
+            self.base_layer_dir = base_layer_dir
         self.tgt_delta = target_delta
 
         if self.is_train:
@@ -42,13 +43,19 @@ class FramesDataset(Dataset):
         return len(self.videos)
 
     def __getitem__(self, idx :int)->Dict[str, Any]:
+        out = {}
         name = self.videos[idx]
         if self.is_train:
             path = os.path.join(self.train_dir, name)
         else:
             path = os.path.join(self.test_dir, name)
 
-        out = {}
+        if self.base_layer:
+            lambda_values = {'50':1.1,'46':1.4, '42':1.8, '38':2.2}
+            bl_qp = np.random.choice([50,46,42,38])
+            bl_path = os.path.join(f"{self.base_layer_dir}_{bl_qp}", name)
+            out.update({'lambda_value': lambda_values[str(bl_qp)]})
+        
         if self.is_train:
             video = iio.imread(f"{path}", plugin="pyav")
             n_frames = len(video) 
@@ -72,6 +79,12 @@ class FramesDataset(Dataset):
             if self.transform is not None:
                 video_array = self.transform(video_array)
                 
+            if self.base_layer:
+                bl_video = iio.imread(f"{bl_path}", plugin="pyav")
+                bl_video_array = []
+                for idx in frame_idx:
+                    bl_video_array.append(bl_video[idx])
+                bl_video_array = img_as_float32(bl_video_array)
 
             
             for idx in range(self.num_sources):
@@ -81,6 +94,8 @@ class FramesDataset(Dataset):
                     out['reference'] = frame.transpose((2, 0, 1))
                 else:
                     out[f'target_{idx-1}'] = frame.transpose((2, 0, 1))
+                    if self.base_layer:
+                        out[f'base_layer_{idx-1}'] = bl_video_array[idx].transpose((2, 0, 1))
         else:
             video = np.array(iio.imread(f"{path}",plugin="pyav"))
             out.update({'video':video, 'name':name})

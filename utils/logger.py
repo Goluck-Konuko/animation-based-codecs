@@ -34,7 +34,6 @@ def draw_colored_heatmap(heatmap, colormap, bg_color):
 class Logger:
     def __init__(self, log_dir: str, 
                  checkpoint_freq: int=100, 
-                 visualizer_params: Dict[str, Any]=None,
                  zfill_num:int=8, log_file_name:str='log.txt',
                  mode:str='test'):
 
@@ -43,7 +42,7 @@ class Logger:
         self.visualizations_dir = os.path.join(log_dir, 'train-vis')
         self.log_file = open(os.path.join(log_dir, log_file_name), 'a')
         self.zfill_num = zfill_num
-        self.visualizer = Visualizer(**visualizer_params)
+        self.visualizer = Visualizer()
         self.checkpoint_freq = checkpoint_freq
         self.epoch = 0
         self.best_loss = float('inf')
@@ -202,12 +201,10 @@ class Visualizer:
         for idx in range(len(target_frames)):
             org_frame = self.detach_frame(out[target_frames[idx]],[H,W])
             images.append(org_frame)
-            
-            if f'kp_flow_{idx}' in out:
-                flow = flow_to_image(out[f'kp_flow_{idx}'].permute(0,3,1,2))
-                flow = (F.interpolate(flow, size=[256, 256])+1.0)/2.0
-                flow = self.detach_frame(flow,[H,W])
-                images.append(flow)
+
+            if f'base_layer_{idx}' in out:
+                bl_frame = self.detach_frame(out[f'base_layer_{idx}'],[H,W])
+                images.append(bl_frame)
 
             if f'prediction_{idx}' in out:
                 anim_frame = self.detach_frame(out[f'prediction_{idx}'],[H,W])
@@ -239,11 +236,7 @@ class Visualizer:
 
             if f'enhanced_pred_{idx}' in out:
                 enh_frame = self.detach_frame(out[f'enhanced_pred_{idx}'],[H,W])
-                images.append(enh_frame)
-
-            if f'sr_pred_{idx}' in out:
-                sr_frame = self.detach_frame(out[f'sr_pred_{idx}'],[H,W])
-                images.append(sr_frame)            
+                images.append(enh_frame)           
 
         image = self.create_image_grid(*images)
         image = (255 * image).astype(np.uint8)

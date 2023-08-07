@@ -23,7 +23,7 @@ class Mask(nn.Module):
 
 class KPOut(nn.Module):
     def __init__(self, in_channels, out_channels,kernel_size=(7, 7), padding=(3,3)) -> None:
-        super(KP_Output, self).__init__()
+        super(KPOut, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,padding=padding)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

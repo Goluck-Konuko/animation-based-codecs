@@ -49,21 +49,22 @@ class TrainerModel(nn.Module):
                 value_total += self.loss_weights['perceptual'][i] * value
         return value_total
     
-    def forward(self, x:Dict[Any], **kwargs):
+    def forward(self, x:Dict[str,Any], **kwargs):
         kp_target = self.kp_extractor(x['target_0'])
         anim_params = {'n_target':self.num_target_frames}
-
+        use_base_layer = self.config['dataset_params']['base_layer']
         for idx in range(self.num_target_frames):
             kp_target_prev = self.kp_extractor(x[f'target_{idx}'])
             anim_params.update({f'target_{idx}': x[f'target_{idx}'], f'kp_target_{idx}': kp_target_prev})
-                    
+            if use_base_layer:
+                anim_params.update({f'base_layer_{idx}': x[f'base_layer_{idx}']})       
+        
         kp_reference = self.kp_extractor(x['reference'])
         anim_params.update({'kp_reference': kp_reference})
 
-
         generated = self.generator(x['reference'],**anim_params)
         generated.update({'kp_reference': kp_reference, 'kp_target_0': kp_target})
-    
+        
         loss_values = {}
         rd_loss = 0.0
         total_distortion = 0.0
@@ -74,7 +75,11 @@ class TrainerModel(nn.Module):
         
         for idx in range(self.num_target_frames):
             tgt = self.num_target_frames-1 
-            perceptual_loss += self.compute_perp_loss(anim_params[f'target_{idx}'],generated[f'prediction_{idx}'])
+            if use_base_layer:
+                lambda_value = x['lambda_value'].unsqueeze(1).unsqueeze(2).unsqueeze(3)
+                perceptual_loss +=  lambda_value * self.compute_perp_loss(anim_params[f'target_{idx}'],generated[f'prediction_{idx}'])
+            else:
+                perceptual_loss += self.compute_perp_loss(anim_params[f'target_{idx}'],generated[f'prediction_{idx}'])
 
             #compute rd loss
             if f'enhanced_pred_{idx}' in generated:
