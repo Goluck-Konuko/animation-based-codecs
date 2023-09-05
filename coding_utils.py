@@ -17,17 +17,18 @@ def load_pretrained_model(model: Union[Generator, KPD], path:str ,name: str='gen
     model.load_state_dict(cpk[name], strict=True)
     return model
 
-def frame2tensor(frame: Union[np.ndarray, torch.Tensor], cuda: bool=True) ->torch.Tensor:
-    '''0-255 [1,H,W,C] -> 0-1 [1,C,H,W]'''
+
+def frame2tensor(frame, cuda=True):
     if isinstance(frame, np.ndarray):
-        frame = torch.from_numpy(frame).permute(0,3,1,2).float()
-    frame = frame.permute(0,3,1,2)/255.0
+        frame = torch.from_numpy(frame).unsqueeze(0).permute(0,3,1,2).float()
+    else:
+        frame = frame.permute(0,3,1,2)
+    frame = frame/255.0
     if torch.cuda.is_available() and cuda:
         frame = frame.cuda()
     return frame
 
-def tensor2frame(tensor: torch.Tensor) -> np.ndarray:
-    '''0-1 (1,C,H,W) -> 0-255 (H,W,C) -> '''
+def tensor2frame(tensor):
     return (tensor.detach().cpu().squeeze().numpy().transpose(1,2,0) * 255.0).astype(np.uint8)
 
 def kp2gaussian(mean, spatial_size, kp_variance=0.01):

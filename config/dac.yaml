@@ -67,10 +67,17 @@ train_params:
     equivariance_value: 10
     equivariance_jacobian: 10
 
+visualizer_params:
+  kp_size: 5
+  draw_border: True
+  colormap: "gist_rainbow"
+
 eval_params:
-  ref_codec: 'ai' #[ai] #to-do: reintegrate BPG codec.
-  qp: 5 #AI_QPS [1-6]
-  metrics: ['lpips', 'msVGG', 'fsim', 'ms_ssim', 'psnr', 'vmaf','dists']
-  temporal: False #Metrics are stored as an average over the whole sequences. Set true to store per frame metrics
-  num_frames: 32 #total number of frames to compress from the input video
-  gop_size: 16 #number of frames to animate from a single reference in the test videos
+  ref_codec: 'ai' #BPG codec is now deprecated :: We use Cheng2020 LIC from compressai
+  qp: 3 #QPS [1-6]
+  metrics: ['lpips','dists','msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf']
+  temporal: False # Set to store per frame reconstruction quality in the output file
+  num_frames: 128 #number of frames to animate from a single reference in the test videos
+  gop_size: 32 #number of frames to animate from 1 reference = gop_size-1
+  rd_point: 0 #
+  fps: 20 #frames-per-second for bitrate computation

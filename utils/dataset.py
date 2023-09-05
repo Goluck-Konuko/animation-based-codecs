@@ -14,24 +14,23 @@ class FramesDataset(Dataset):
       - '.mp4' or '.gif'
       - folder with all frames
     """
-    def __init__(self, train_dir: str, test_dir:str, base_layer_dir:str=None, frame_shape: tuple =(256, 256, 3), is_train: bool=True,
+    def __init__(self, train_dir: str,test_dir: str, frame_shape: tuple =(256, 256, 3), is_train: bool=True,
                  base_layer: bool=False,  augmentation_params: Dict[str, Any]=None, 
-                 num_sources: int=2, target_delta: int=2, **kwargs):
+                 num_sources: int=2, use_saliency_map: bool=False,base_layer_params = None,
+                 target_delta: int=2, **kwargs):
         print("LOADING DATASET..")
         self.is_train = is_train
         self.frame_shape = tuple(frame_shape)
-        self.train_dir = train_dir
-        self.test_dir = test_dir
         if self.is_train:
-            self.videos = os.listdir(self.train_dir)
+            self.root_dir = train_dir
         else:
-            self.videos = os.listdir(self.test_dir)
+            self.root_dir = test_dir
+        self.videos = os.listdir(self.root_dir)
                 
         self.num_sources = num_sources
 
         self.base_layer = base_layer
-        if self.base_layer:
-            self.base_layer_dir = base_layer_dir
+        self.base_layer_params = base_layer_params
         self.tgt_delta = target_delta
 
         if self.is_train:
@@ -43,21 +42,16 @@ class FramesDataset(Dataset):
         return len(self.videos)
 
     def __getitem__(self, idx :int)->Dict[str, Any]:
-        out = {}
         name = self.videos[idx]
+        path = os.path.join(self.root_dir, name)
+        out = {}
         if self.is_train:
-            path = os.path.join(self.train_dir, name)
-        else:
-            path = os.path.join(self.test_dir, name)
-
-        if self.base_layer:
-            lambda_values = {'50':1.1,'46':1.4, '42':1.8, '38':2.2}
-            bl_qp = np.random.choice([50,46,42,38])
-            bl_path = os.path.join(f"{self.base_layer_dir}_{bl_qp}", name)
-            out.update({'lambda_value': lambda_values[str(bl_qp)]})
-        
-        if self.is_train:
-            video = iio.imread(f"{path}", plugin="pyav")
+            if self.base_layer:
+                bl_qp = np.random.choice(list(self.base_layer_params['qp_values'].keys()))
+                bl_path = os.path.join(f"{self.base_layer_params['dir']}_{bl_qp}", name)
+                out.update({'lambda_value': self.base_layer_params['qp_values'][bl_qp]})
+                
+            video = iio.imread(f"{path}", plugin='pyav')
             n_frames = len(video) 
 
             src_idx = np.random.choice(n_frames//2)

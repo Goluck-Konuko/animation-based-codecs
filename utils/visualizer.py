@@ -49,15 +49,13 @@ class Visualizer:
 
     def visualize(self, **out):
         images = []
-        mv_flow, kp_flow,res_temp = [],[],[]
-
         if 'reference_frame' in out:
             source = out['reference_frame'].data.cpu()
             kp_source = out['kp_reference']['value'].data.cpu().numpy()
             source = np.transpose(source, [0, 2, 3, 1])
             if 'kp_src' in out:
                 images.append((source, -1*out['kp_src'].data.cpu().numpy()))
-            images.append(source, kp_source)
+            images.append((source, kp_source))
   
         if 'target_frame' in  out:
             driving = out['target_frame'].data.cpu()

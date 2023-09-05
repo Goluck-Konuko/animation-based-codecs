@@ -22,14 +22,13 @@ model_params:
     max_features: 1024
     scale_factor: 0.25
     num_blocks: 5
-    quantize: True
   generator_params:
     block_expansion: 64
     max_features: 512
     num_down_blocks: 2
     num_bottleneck_blocks: 6
     estimate_occlusion_map: True
-    residual_features: 12
+    residual_features: 48
     temporal_residual_learning: False #Set to true to learn temporal residuals & set train_params[num_sources] >=3 
     dense_motion_params:
       block_expansion: 64
@@ -37,11 +36,10 @@ model_params:
       num_blocks: 5
       scale_factor: 0.25
     sdc_params:
+      variable_bitrate: True
+      levels: 8
       scale_factor: 1 #set to fraction to test if compression efficiecy is higher with lower dimension residuals
-      num_intermediate_layers: 2 #upsampling/downsampling blocks in the compression VAE
-    rec_network_params:
-      gen_rec: True #Use convolutional network for reconstruction
-      num_blocks: 4
+      num_intermediate_layers: 3 #upsampling/downsampling blocks in the compression VAE = num_intermediate_layers + 2
 
   discriminator_params:
     scales: [1]
@@ -61,7 +59,7 @@ train_params:
   rd_lambda: [0.05,0.1,0.2,0.3,0.5,0.7,0.9,1.4]
   target_rate: 2
   checkpoint_freq: 10
-  step_wise: False
+  step_wise: True
   adversarial_training: False
   transform_params:
     sigma_affine: 0.05
@@ -75,10 +73,20 @@ train_params:
     equivariance_value: 10
     equivariance_jacobian: 10
 
+visualizer_params:
+  kp_size: 5
+  draw_border: True
+  colormap: "gist_rainbow"
+
 eval_params:
-  ref_codec: 'ai' #[ai] #to-do: reintegrate BPG codec.
-  qp: 5 #AI_QPS [1-6]
-  metrics: ['lpips', 'msVGG', 'fsim', 'ms_ssim', 'psnr', 'vmaf','dists']
-  temporal: False #Metrics are stored as an average over the whole sequences. Set true to store per frame metrics
-  num_frames: 32 #total number of frames to compress from the input video
-  gop_size: 16 #number of frames to animate from a single reference in the test videos
+  ref_codec: 'ai' #
+  qp: 4 #QPS [1-6]
+  metrics: ['lpips','dists','msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf'] #evaluation metrics: Other implemented metrics ['psnr-hvs', 'nlpd', 'iw_ssim','vif']
+  temporal: False #store per frame quality in the output file
+  num_frames: 32 #First N frames to compress in the test videos
+  gop_size: 32 #Number of frames to predict from 1 reference frame
+  rd_point: 2 #[0-7] Target RD point
+  q_value: 0.0 #interpolation factor between RD points [we use linear interpolation to code at intermediate RD points]
+  use_skip: True #compares the latent representation of frame residuals [[Using COSINE SIMILARITY]] and skips if necessary.
+  skip_thresh: 0.8 #if the similarity is above this value then skip current frame residual and reuse the previously decoded residual
+  fps: 20

@@ -100,7 +100,6 @@ if __name__ == "__main__":
 
     elif model_id == 'rdac':
         generator = models.GeneratorRDAC(**generator_params)
-    
     else:
         raise Exception("Unknown model architecture!! CHOOSE FROM : [dac,hdac,rdac,rdac_temporal,rdac_temporal_comp, rdac_temporal_comp_mv]")
     

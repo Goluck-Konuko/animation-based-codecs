@@ -423,11 +423,9 @@ class MSVGG(MetricParent):
         self.scales  = [1, 0.5, 0.25,0.125]
         self.wm_scales = [1, 0.5, 0.25, 0.125, 0.0625]
         self.vgg = Vgg19()
-        self.pyramid = ImagePyramide(self.scales, 3)        
-        self.pyramid_f  = to_cuda(self.pyramid_f)        
+        self.pyramid = ImagePyramide(self.scales, 3)             
         self.vgg = to_cuda(self.vgg)
         self.pyramid = to_cuda(self.pyramid)
-        self.wm_pyramide = to_cuda(self.wm_pyramide)
  
     def calc(self, org: np.array, dec: np.array): 	
         org = torch.tensor(org[np.newaxis].astype(np.float32)).permute(0,3, 1, 2)

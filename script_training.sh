@@ -7,7 +7,7 @@ MODEL="${1:-rdac}"
 #       - End-to-end trained to animate and compress the residual difference between the animated and original frames
 #       - Uses the variational autoencoder network from Image compression
 #        with design features enabling the compression of sparse residuals
-#      - Can be trained to learn temporal correlations between neighbouring residual frames
+#      - Can be trained to exploit temporal correlations between neighbouring frame residual
 #                       
 #Other parameters are configured from the yaml files in <config/*> folder
 #######

@@ -27,7 +27,7 @@ Use ```--mode test``` at inference time with the same config file after changing
  	The input videos should be cropped to target the speaker's face at a resolution of 256x256 (Updates are underway to add higher resolution). 
 
     **Pre-processed videos (256x256 px)**
-    We provide preprocessed videos at the following link: [google-drive](https://drive.google.com/drive/folders/1g0U1ZCTszm3yrmIewg7FahXsxyMBfxKj?usp=drive_link). Please read the README file included with the video data.
+    We provide preprocessed videos at the following link: [google-drive](https://drive.google.com/drive/folders/1g0U1ZCTszm3yrmIewg7FahXsxyMBfxKj?usp=sharing)
 
     Download put the videos in ```datasets/train``` and ```datasets/inference``` folders.
 
