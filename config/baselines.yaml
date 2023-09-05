@@ -27,7 +27,7 @@ eval_params:
   qp: 30 #HEVC_QPS [50,45,40,35,30]
   metrics: ['lpips','dists', 'msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf']
   temporal: False
-  num_frames: 64
-  gop_size: 32
+  num_frames: 128 #First N frames compressed from an input video
+  gop_size: 32 #Number of P frames = gop_size-1
   rd_point: 0
-  fps: 20
+  fps: 20 #frame-rate for bitrate computation

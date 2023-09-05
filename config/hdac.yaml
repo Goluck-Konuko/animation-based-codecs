@@ -76,9 +76,11 @@ visualizer_params:
   colormap: "gist_rainbow"
 
 eval_params:
-  ref_codec: 'ai' #BPG codec is now deprecated :: We use Cheng2020 LIC from compressai
+  #BPG codec is now deprecated :: We use Cheng2020 LIC from compressai
+  ref_codec: 'ai' 
   qp: 4 #QPS [1-6]
   bl_qp: 50 # QP value for the base layer when using HDAC
+  #evaluation metrics: Other implemented metrics ['psnr-hvs', 'nlpd', 'iw_ssim','vif']
   metrics: ['lpips','dists','msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf']
   temporal: False # Set to store per frame reconstruction quality in the output file
   num_frames: 128 #number of frames to animate from a single reference in the test videos

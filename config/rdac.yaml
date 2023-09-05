@@ -79,9 +79,11 @@ visualizer_params:
   colormap: "gist_rainbow"
 
 eval_params:
+  #BPG codec is now deprecated :: We use Cheng2020 LIC from compressai
   ref_codec: 'ai' #
   qp: 4 #QPS [1-6]
-  metrics: ['lpips','dists','msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf'] #evaluation metrics: Other implemented metrics ['psnr-hvs', 'nlpd', 'iw_ssim','vif']
+  #evaluation metrics: Other implemented metrics ['psnr-hvs', 'nlpd', 'iw_ssim','vif']
+  metrics: ['lpips','dists','msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf'] 
   temporal: False #store per frame quality in the output file
   num_frames: 32 #First N frames to compress in the test videos
   gop_size: 32 #Number of frames to predict from 1 reference frame

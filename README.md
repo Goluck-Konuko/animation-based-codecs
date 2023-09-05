@@ -44,10 +44,11 @@ Supported metrics: 'psnr', 'psnr-hvs','fsim','iw_ssim','ms_ssim','vif','nlpd', '
 
 ## Training
 Set the ```config/[MODEL_NAME].yaml``` parameters appropriately or use default (to reproduce our results) and run ```bash script_training.sh [MODEL_NAME]```. 
-The default setup uses a single GPU (NVIDIA-A100). However, training DAC and HDAC can be trained on multiple GPUs by using distributed dataparallel and setting ```--device_ids``` parameter as desired.
+The default setup uses a single GPU (NVIDIA-A100). However, training DAC, HDAC and RDAC can be trained on multiple GPUs by using distributed dataparallel and setting ```--device_ids``` parameter as desired.
 
 ## Testing
-Set the ```eval_params``` on the ```config/[MODEL_NAME].yaml``` file and run ```bash script_test.sh [MODEL_NAME]```
+Set the ```eval_params``` on the ```config/[MODEL_NAME].yaml``` file and run ```bash script_test.sh [MODEL_NAME]```.
+NOTE: ```baselines.yaml``` is used for HEVC, VVC and VVENC.
 
 
 ### Attributions
