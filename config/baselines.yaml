@@ -25,8 +25,9 @@ visualizer_params:
 eval_params:
   ref_codec: 'hevc' #[hevc, vvc, vvenc]
   qp: 30 #HEVC_QPS [50,45,40,35,30]
+  #evaluation metrics: Other implemented metrics ['psnr-hvs', 'nlpd', 'iw_ssim','vif']
   metrics: ['lpips','dists', 'msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf']
-  temporal: False
+  temporal: False #Set to store per frame metrics in the output file
   num_frames: 128 #First N frames compressed from an input video
   gop_size: 32 #Number of P frames = gop_size-1
   rd_point: 0

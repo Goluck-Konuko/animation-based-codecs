@@ -47,8 +47,11 @@ Set the ```config/[MODEL_NAME].yaml``` parameters appropriately or use default (
 The default setup uses a single GPU (NVIDIA-A100). However, training DAC, HDAC and RDAC can be trained on multiple GPUs by using distributed dataparallel and setting ```--device_ids``` parameter as desired.
 
 ## Testing
-Set the ```eval_params``` on the ```config/[MODEL_NAME].yaml``` file and run ```bash script_test.sh [MODEL_NAME]```.
+
 NOTE: ```baselines.yaml``` is used for HEVC, VVC and VVENC.
+Download the HEVC, VVC(VTM-12) from  [google-drive](https://drive.google.com/drive/folders/1KJELtQO_RvpFqu9YZYaXhyOksdbv9zWh?usp=sharing) and put them ```conventional_codecs/``` folder.
+
+Set the ```eval_params``` on the ```config/[MODEL_NAME].yaml``` file and run ```bash script_test.sh [MODEL_NAME]```.
 
 
 ### Attributions
