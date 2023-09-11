@@ -8,8 +8,8 @@ from .nn_utils import ResBlock2d, SameBlock2d,UpBlock2d, DownBlock2d, OutputLaye
 
 class GeneratorDAC(nn.Module):
     """
-    Similar Architecture to GeneratorFOM. Trained without jacobians i.e. Zero-order motion representation
-    --added bitrate estimation method.
+    Similar Architecture to GeneratorFOM. Trained without jacobians i.e. 
+    Zero-order motion representation.
     """
     def __init__(self, num_channels=3, num_kp=10, block_expansion=64, max_features=1024, num_down_blocks=2,
                  num_bottleneck_blocks=3, estimate_occlusion_map=False, dense_motion_params=None,**kwargs):
@@ -121,7 +121,7 @@ class GeneratorDAC(nn.Module):
 class GeneratorHDAC(GeneratorDAC):
     """
     Motion Transfer Generator with a scalable base layer encoder and 
-    a conditional Multi-scale feature fusion
+    a conditional feature fusion.
     """
     def __init__(self, num_channels=3, num_kp=10, block_expansion=64, max_features=1024, num_down_blocks=2,
                  num_bottleneck_blocks=3, estimate_occlusion_map=False, dense_motion_params=None, **kwargs):
@@ -195,7 +195,7 @@ class GeneratorHDAC(GeneratorDAC):
 
 class GeneratorRDAC(GeneratorDAC):
     """
-    Generator architecture using spatial attention layers and ConvNext Modules
+    Predictive animation model with spatio-temporal residual learning VAE.
     """
     def __init__(self, num_channels=3, num_kp=10, block_expansion=64, max_features=1024, num_down_blocks=2,
                  num_bottleneck_blocks=3, estimate_occlusion_map=False, 
@@ -234,12 +234,45 @@ class GeneratorRDAC(GeneratorDAC):
 
         #downsample the residual map
         res_hat, bpp = self.sdc(residual,rate_idx = params['rate_idx'])
-        # res_hat = torch.clamp(res_hat,-1,1)
         output_dict['res_hat'] = res_hat
         output_dict['rate'] = bpp
         
         output_dict['enhanced_prediction'] = (animated_frame+res_hat).clamp(0,1)
         return output_dict
+
+    def animate_next(self, params):
+        #perform animation of previous frame
+        output_dict = {}
+
+        motion_pred_params = { 
+                            'reference_frame': params['reference_frame'],
+                            'reference_frame_features': params['ref_fts'],
+                            'kp_reference': params['kp_reference'],
+                            'kp_target': params['kp_target']}
+
+        #then animate current frame with residual info from the current frame
+        def_ref_fts  = self.motion_prediction_and_compensation(**motion_pred_params)
+        
+        out_ft_maps = self.bottleneck(def_ref_fts) #input the weighted average 
+        animated_frame = self.animated_frame_decoder(out_ft_maps)
+        output_dict['prediction'] = animated_frame
+
+        residual = params['target_frame'] - animated_frame
+        temporal_residual = residual - params['prev_res_hat']
+        output_dict['res'] = residual
+
+        #downsample the residual map
+        temp_res_hat, bpp = self.tdc(temporal_residual,rate_idx = params['rate_idx'])
+
+        res_hat = params['prev_res_hat'] + temp_res_hat
+        
+        output_dict['res_hat'] = res_hat
+        output_dict['rate'] = bpp
+        
+        output_dict['enhanced_prediction'] = (animated_frame+res_hat).clamp(0,1)
+        return output_dict
+
+    
 
     def update(self, output_dict, output,idx):
         output_dict.update({f'prediction_{idx}': output['prediction']})
@@ -262,8 +295,11 @@ class GeneratorRDAC(GeneratorDAC):
                     'kp_reference': kwargs['kp_reference'],
                     'kp_target': kwargs[f'kp_target_{idx}'],
                     'rate_idx': kwargs[f'rate_idx_{idx}']}
-            
-            output = self.animate_first(params)
+            if idx>1 and self.temporal_learning:
+                params.update({'prev_res_hat': output_dict[f'res_hat_{idx-1}']})
+                output = self.animate_next(params)
+            else:
+                output = self.animate_first(params)
             output_dict = self.update(output_dict, output, idx)
         return output_dict
 
@@ -274,120 +310,5 @@ class GeneratorRDAC(GeneratorDAC):
     
     def compress_temporal_residual(self,residual_frame:torch.Tensor,prev_latent:torch.Tensor,
                                   rate_idx=0, q_value=1.0,use_skip=False, skip_thresh=0.9)->Dict[str, Any]:
-        res_info = self.tdc.rans_compress(residual_frame,prev_latent, rate_idx, q_value, use_skip, skip_thresh)
+        res_info = self.sdc.rans_compress(residual_frame,prev_latent, rate_idx, q_value, use_skip, skip_thresh)
         return res_info
-
-
-
-# # class GeneratorRDAC(GeneratorDAC):
-#     """
-#     Predictive coding architecture: Residual coding and temporal learning:
-#     - the temporal difference is computed directly between the current
-#     residual and the previously decoded residual.
-#     - Optionally trainable without the temporal learning process
-#     """
-#     def __init__(self, num_channels=3, num_kp=10, block_expansion=64, max_features=1024, num_down_blocks=2,
-#                  num_bottleneck_blocks=3, estimate_occlusion_map=False, dense_motion_params=None,
-#                  sdc_params=None, rec_network_params=None,  **kwargs):
-#         super(GeneratorRDAC, self).__init__(num_channels, num_kp, block_expansion, max_features, num_down_blocks,
-#                  num_bottleneck_blocks, estimate_occlusion_map, dense_motion_params, **kwargs)
-        
-#         # spatial_difference_coder
-#         self.sdc = DifferenceCoder(num_channels,num_channels, kwargs['residual_features'], int(kwargs['residual_features']*1.5),**sdc_params)
-
-#         #Temporal_difference_coder 
-#         self.temporal_learning = kwargs['temporal_residual_learning']
-#         if self.temporal_learning:
-#             self.tdc= DifferenceCoder(num_channels,num_channels, kwargs['residual_features'], int(kwargs['residual_features']*1.5),**sdc_params)
-    
-#     def train_spatial_residual(self, params: Dict[str, Any]):
-#         #Train to compress the frame residual between animation and target frame
-#         output_dict = {}
-#         animated_frame = self.animate(params)
-#         output_dict['prediction'] = animated_frame 
-
-#         residual = params['target_frame'] - animated_frame
-#         output_dict['res'] = residual
-
-#         #downsample the residual map
-#         res_hat, bpp = self.sdc(residual)
-#         output_dict['res_hat'] = res_hat
-#         output_dict['rate'] = bpp
-
-#         output_dict['enhanced_prediction'] = (animated_frame+res_hat).clamp(0,1) 
-#         return output_dict
-    
-#     def train_temporal_residual(self, params: Dict[str, Any]):
-#         ## Train to compress the temporal frame residual
-#         output_dict = {}
-#         animated_frame = self.animate(params)
-#         output_dict['prediction'] = animated_frame
-        
-#         #Compute and encode the difference between the animated and target images
-#         residual = params['target_frame'] - animated_frame
-        
-#         #if we have information about the previous frame residual
-#         #then we can use it as additional information to minimize the entropy of current frame
-        
-#         residual_temp = residual-params[f"res_hat_prev"]
-#         output_dict['res'] = residual
-#         output_dict['res_temp'] = residual_temp
-
-#         #compress the temporal residual
-#         res_hat_temp, bpp = self.tdc(residual_temp)
-#         output_dict['res_temp_hat'] = res_hat_temp
-#         output_dict['rate'] = bpp
-
-#         #reconstitute actual synthesis residual from previous frame and current
-#         res_hat =  params["res_hat_prev"]+res_hat_temp
-#         output_dict["res_hat"] = res_hat   
-
-#         output_dict['enhanced_prediction'] = (animated_frame+res_hat).clamp(0,1)
-#         return output_dict
-   
-#     def compress_spatial_residual(self,residual_frame:torch.Tensor,scale_factor:float=1.0)->Dict[str, Any]:
-#         '''
-#         Compresses the frame residual between the animated frame and the target frame
-#         '''
-#         res_info = self.sdc.rans_compress(residual_frame, scale_factor)
-#         return res_info
-    
-#     def compress_temporal_residual(self,cur_residual_frame:torch.Tensor,prev_residual_frame:torch.Tensor,scale_factor:float=1.0)->Dict[str, Any]:
-#         '''
-#         Compresses the temporal difference between the residual frames
-#         '''
-#         temporal_residual = cur_residual_frame - prev_residual_frame
-#         res_info = self.tdc.rans_compress(temporal_residual, scale_factor)
-#         res_info.update({'res_hat':res_info['res_hat']+prev_residual_frame})
-#         return res_info
-    
-#     def forward(self, reference_frame: torch.Tensor, **kwargs):     
-#         # Encoding (downsampling) part      
-#         # Transforming feature representation according to deformation and occlusion
-#         # Previous frame animation
-#         output_dict = {}
-#         for idx in range(kwargs['n_target']):
-#             params = {'reference_frame': reference_frame,
-#                     'target_frame':kwargs[f'target_{idx}'],
-#                     'kp_reference': kwargs['kp_reference'],
-#                     'kp_target': kwargs[f'kp_target_{idx}']}
-#             if idx > 0 and self.temporal_learning:
-#                 params.update({'res_hat_prev': output_dict[f'res_hat_0']})
-#                 output = self.train_temporal_residual(params)
-#             else:
-#                 output = self.train_spatial_residual(params)
-            
-#             if 'res_temp' in output:
-#                 output_dict.update({f'res_temp_{idx}': output['res_temp']})
-#                 output_dict.update({f'res_temp_hat_{idx}': output['res_temp_hat']})
-            
-#             output_dict = self.update(output_dict, output, idx)
-#         return output_dict
-    
-#     def update(self, output_dict, output,idx):
-#         output_dict.update({f'prediction_{idx}': output['prediction']})
-#         output_dict.update({f'res_{idx}': output['res']})
-#         output_dict.update({f'res_hat_{idx}': output['res_hat']})
-#         output_dict.update({f'rate_{idx}': output['rate']}) 
-#         output_dict.update({f'enhanced_pred_{idx}': output['enhanced_prediction']})
-#         return output_dict

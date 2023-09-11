@@ -29,7 +29,7 @@ model_params:
     num_bottleneck_blocks: 6
     estimate_occlusion_map: True
     residual_features: 48
-    temporal_residual_learning: False #Set to true to learn temporal residuals & set train_params[num_sources] >=3 
+    temporal_residual_learning: True #Set to true to learn temporal residuals & set train_params[num_sources] >=3 
     dense_motion_params:
       block_expansion: 64
       max_features: 1024
@@ -85,10 +85,10 @@ eval_params:
   #evaluation metrics: Other implemented metrics ['psnr-hvs', 'nlpd', 'iw_ssim','vif']
   metrics: ['lpips','dists','msVGG', 'fsim', 'ms_ssim', 'psnr','vmaf'] 
   temporal: False #store per frame quality in the output file
-  num_frames: 32 #First N frames to compress in the test videos
+  num_frames: 128 #First N frames to compress in the test videos
   gop_size: 32 #Number of frames to predict from 1 reference frame
-  rd_point: 2 #[0-7] Target RD point
+  rd_point: 4 #[0-7] Target RD point
   q_value: 0.0 #interpolation factor between RD points [we use linear interpolation to code at intermediate RD points]
   use_skip: True #compares the latent representation of frame residuals [[Using COSINE SIMILARITY]] and skips if necessary.
-  skip_thresh: 0.8 #if the similarity is above this value then skip current frame residual and reuse the previously decoded residual
+  skip_thresh: 0.5 #if the similarity is above this value then skip current frame residual and reuse the previously decoded residual
   fps: 20

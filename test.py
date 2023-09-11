@@ -12,7 +12,7 @@ from coding_utils import *
 from typing import Protocol
 from entropy_coders import KpEntropyCoder
 
-class Generator(Protocol):
+class animation_model(Protocol):
     def forward(self):
         ...
 
@@ -42,7 +42,7 @@ from entropy_coders import KpEntropyCoder, ResEntropyCoder
 from conventional_codecs import HEVC, VVC_VTM, VvenC
 
 
-class Generator(Protocol):
+class animation_model(Protocol):
     def forward(self):
         ...
 
@@ -50,13 +50,22 @@ class KPD(Protocol):
     def forward(self):
         ...
 
-class AnimationCodec:
-    def __init__(self,generator: Generator, kp_detector: KPD, 
-                 image_coder: ImageCoder, kp_coder: KpEntropyCoder, eval_params=None) -> None:
-        self.generator = generator 
-        self.kp_detector = kp_detector
+class KPD(Protocol):
+    def forward(self):
+        ...
+
+class Models:
+    def __init__(self,animation_model: Generator, kp_detector_model: KPD, 
+                 image_coder: ImageCoder, kp_coder: KpEntropyCoder) -> None:
+        self.animation_model = animation_model 
+        self.kp_detector_model = kp_detector_model
+
+        #Entropy coders
         self.image_coder = image_coder
         self.kp_coder = kp_coder
+
+class Inputs:
+    def __init__(self,eval_params=None) -> None:
         self.num_frames = eval_params['num_frames']
         self.gop_size = eval_params['gop_size']
         self.eval_params = eval_params
@@ -67,16 +76,8 @@ class AnimationCodec:
         else:
             self.base_layer_qp = 50
 
-        self.total_bits = 0
-        self.enc_time = 0
-        self.dec_time = 0
-
         self.gops = []
         self.original_video = []
-        self.decoded_video = []
-        self.visualization = []
-        self.animated_video = []
-        self.scales, self.means = [], []
 
     def create_gops(self):
         if self.num_frames >= self.gop_size:
@@ -86,27 +87,26 @@ class AnimationCodec:
         for idx in range(num_gops):
             self.gops.append(self.video[idx*self.gop_size: idx*self.gop_size+self.gop_size])
 
-
-    def reset(self)-> None:
-        self.num_frames= -1
-        self.video = None
-        
+class Outputs:
+    def __init__(self) -> None:
         self.total_bits = 0
         self.enc_time = 0
         self.dec_time = 0
 
-        self.gops = []
-        self.original_video = []
         self.decoded_video = []
         self.visualization = []
         self.animated_video = []
-        self.scales, self.means = [], []
 
-    def get_bitrate(self, fps=None):
+
+    def update_bits_and_time(self, info):
+        self.total_bits += info['bitstring_size']
+        self.enc_time += info['time']['enc_time']
+        self.dec_time += info['time']['dec_time']
+
+    def get_bitrate(self, fps:float, num_frames: int):
         '''Returns the bitrate of the compressed video'''
-        if fps is None:
-            fps = self.fps
-        return ((self.total_bits*fps)/(1000*self.num_frames))
+        return ((self.total_bits*fps)/(1000*num_frames))
+
 
 class ConventionalCodec:
     def __init__(self, eval_params: Dict[str, Any]) -> None:
@@ -239,182 +239,165 @@ import torch.nn.functional as F
 def rescale(frame, scale_factor=0.5):
     return F.interpolate(frame, scale_factor=(scale_factor, scale_factor),mode='bilinear', align_corners=True)
 
-
-def animation_coder(codec, visualizer: Visualizer):
-    '''Animation-only CODEC'''
-    for gop in codec.gops:
+def animation_coder(models, input_data,  visualizer: Visualizer):
+    output_data  = Outputs()
+    for gop in input_data.gops:
         org_reference = frame2tensor(gop[0], cuda=False)
-        codec.original_video.append(tensor2frame(org_reference))
+        input_data.original_video.extend(gop)
 
-        dec_reference_info = codec.image_coder(org_reference)
-        codec = update_bits_and_time(codec, dec_reference_info)
+        dec_reference_info = models.image_coder(org_reference)
+        output_data.update_bits_and_time(dec_reference_info)
 
         reference_frame = dec_reference_info['decoded']
-        kp_reference = codec.kp_detector(reference_frame)
-        codec.kp_coder.kp_reference = kp_reference
+        kp_reference = models.kp_detector_model(reference_frame)
+        models.kp_coder.kp_reference = kp_reference
         
-        codec.decoded_video.append(tensor2frame(reference_frame))
-        codec.animated_video.append(tensor2frame(reference_frame))
+        output_data.decoded_video.append(tensor2frame(reference_frame))
+        output_data.animated_video.append(tensor2frame(reference_frame))
 
-        for idx in trange(1,codec.gop_size):
+        for idx in trange(1, input_data.gop_size):
             target_frame = frame2tensor(gop[idx])
-            codec.original_video.append(tensor2frame(target_frame))
-            kp_target = codec.kp_detector(target_frame)
+            kp_target = models.kp_detector_model(target_frame)
 
-            kp_coding_info = codec.kp_coder.encode_kp(kp_target = kp_target)
-            codec = update_bits_and_time(codec, kp_coding_info)
+            kp_coding_info = models.kp_coder.encode_kp(kp_target = kp_target)
+            output_data.update_bits_and_time(kp_coding_info)
             
             kp_target_hat = kp_coding_info['kp_hat']
 
             #animation and residual coding
             anim_params = {'kp_reference':kp_reference,'kp_target':kp_target_hat}
-            animated_frame = codec.generator.animate(reference_frame, **anim_params)
+            animated_frame = models.animation_model.animate(reference_frame, **anim_params)
             residual_frame = target_frame-animated_frame
-            codec.decoded_video.append(tensor2frame(animated_frame))
+            output_data.decoded_video.append(tensor2frame(animated_frame))
 
             viz_params = {'reference_frame':reference_frame,
                             'target_frame':target_frame,
                             'res': residual_frame,
                             **anim_params,
                             'prediction': animated_frame}
-
             viz_img = visualizer.visualize(**viz_params)
-            codec.visualization.append(viz_img)
-    return codec
+            output_data.visualization.append(viz_img)
+    return output_data
 
-def hybrid_coder(codec, visualizer: Visualizer):
-    '''
-    Hybrid coding framework using deep image animation and HEVC
-    '''
-    for gop in codec.gops:
+def hybrid_coder(models, input_data, visualizer: Visualizer, scale_factor: float= 1):
+    output_data  = Outputs()
+    for gop in input_data.gops:
         org_reference = frame2tensor(gop[0], cuda=False)
-        codec.original_video.extend(gop)
+        input_data.original_video.extend(gop)
         
-        dec_reference_info = codec.image_coder(org_reference)
-        codec = update_bits_and_time(codec, dec_reference_info)
+        dec_reference_info = models.image_coder(org_reference)
+        output_data.update_bits_and_time(dec_reference_info)
 
         #create base layer_stream
         #downsample the base layer video
-        bl_video = gop[1:codec.num_frames]
-        base_layer_info = run_hevc(bl_video, codec.base_layer_qp)
+        bl_video = resize_frames(gop[1:input_data.gop_size],scale_factor)
+        base_layer_info = run_hevc(bl_video, input_data.base_layer_qp)
         
         #upsample the decoded base layer
-        base_layer = base_layer_info['dec_frames']
-        codec = update_bits_and_time(codec, base_layer_info)
+        base_layer = resize_frames(base_layer_info['dec_frames'], 1//scale_factor)
+        output_data.update_bits_and_time(base_layer_info)
 
         reference_frame = dec_reference_info['decoded']
-        kp_reference = codec.kp_detector(reference_frame)
-        codec.kp_coder.kp_reference = kp_reference
+        kp_reference = models.kp_detector_model(reference_frame)
+        models.kp_coder.kp_reference = kp_reference
         
-        codec.decoded_video.append(tensor2frame(reference_frame))
-        codec.animated_video.append(tensor2frame(reference_frame))
+        output_data.decoded_video.append(tensor2frame(reference_frame))
+        output_data.animated_video.append(tensor2frame(reference_frame))
 
-        for idx in trange(1,codec.gop_size):
+        for idx in trange(1,input_data.gop_size):
             target_frame = frame2tensor(gop[idx])
             base_layer_frame = frame2tensor(base_layer[idx-1])
             
-            kp_target = codec.kp_detector(target_frame)
+            kp_target = models.kp_detector_model(target_frame)
 
-            kp_coding_info = codec.kp_coder.encode_kp(kp_target = kp_target)
-            codec = update_bits_and_time(codec, kp_coding_info)
+            kp_coding_info = models.kp_coder.encode_kp(kp_target = kp_target)
+            output_data.update_bits_and_time(kp_coding_info)
 
             kp_target_hat = kp_coding_info['kp_hat']
             #animation and residual coding
-            anim_params = {'reference_frame':reference_frame,
-                           'base_layer':base_layer_frame,
-                           'kp_reference':kp_reference,
-                           'kp_target':kp_target_hat}
-            animated_frame = codec.generator.animate(anim_params)
+            anim_params = {'reference_frame':reference_frame,'base_layer':base_layer_frame,
+                        'kp_reference':kp_reference,'kp_target':kp_target_hat}
+            animated_frame = models.animation_model.animate(anim_params)
 
             residual_frame = target_frame - animated_frame
-            codec.decoded_video.append(tensor2frame(animated_frame))
+            output_data.decoded_video.append(tensor2frame(animated_frame))
 
             viz_params = {'reference_frame':reference_frame,
                             'target_frame':target_frame,
                             'res': residual_frame,
-                            'prediction': animated_frame,
-                            **anim_params}
+                            **anim_params,
+                            'prediction': animated_frame}
             
             viz_img = visualizer.visualize(**viz_params)
-            codec.visualization.append(viz_img)
-    return codec
+            output_data.visualization.append(viz_img)
+    return output_data
 
-def predictive_coder(codec, visualizer: Visualizer, temporal_prediction=False):
-    '''Predictive coding with deep image animation
-    - Uses image animation and learned residual coding
-    '''
-    for gop in codec.gops:
+def predictive_coder(models, input_data, visualizer: Visualizer,method='rdac'):
+    output_data  = Outputs()
+    for gop in input_data.gops:
+        input_data.original_video.extend(gop)
         org_reference = frame2tensor(gop[0], cuda=False)
-        codec.original_video.extend(gop)
-
-        dec_reference_info = codec.image_coder(org_reference)
-        codec = update_bits_and_time(codec, dec_reference_info)
+        dec_reference_info = models.image_coder(org_reference)
+        output_data.update_bits_and_time(dec_reference_info)
 
         reference_frame = dec_reference_info['decoded']
-        if torch.cuda.is_available():
-            reference_frame = reference_frame.cuda()
         with torch.no_grad():
-            kp_reference = codec.kp_detector(reference_frame)
-            codec.kp_coder.kp_reference = kp_reference
+            kp_reference = models.kp_detector_model(reference_frame)
+            models.kp_coder.kp_reference = kp_reference
             
-            codec.decoded_video.append(tensor2frame(reference_frame))
-            codec.animated_video.append(tensor2frame(reference_frame))
-
-            prev_latent, prev_rec, kp_prev_target, prev_residual_frame = None, None, None, None
+            output_data.decoded_video.append(tensor2frame(reference_frame))
+            output_data.animated_video.append(tensor2frame(reference_frame))
             
-            for idx in trange(1,codec.num_frames):
+            prev_latent = None
+            for idx in trange(1,input_data.gop_size):
                 target_frame = frame2tensor(gop[idx])
-                kp_target = codec.kp_detector(target_frame)
+                kp_target = models.kp_detector_model(target_frame)
 
-                kp_coding_info = codec.kp_coder.encode_kp(kp_target = kp_target)
-                codec = update_bits_and_time(codec, kp_coding_info)
+                kp_coding_info = models.kp_coder.encode_kp(kp_target = kp_target)
+                output_data.update_bits_and_time(kp_coding_info)
 
                 kp_target_hat = kp_coding_info['kp_hat']
+                # saliency_map = generate_saliency_map(kp_target_hat['value'],(256,256))
+                saliency_map = None
                 #animation and residual coding
                 anim_params = {'kp_reference':kp_reference,'kp_target':kp_target_hat}
-                animated_frame = codec.generator.animate(reference_frame, **anim_params)
-                
-                #compute frame residual
+                animated_frame = models.animation_model.animate(reference_frame, **anim_params)
                 residual_frame = target_frame-animated_frame
-                eval_params = {'rate_idx': codec.eval_params['rd_point'],
-                               'q_value':codec.eval_params['q_value'],
-                               'use_skip': codec.eval_params['use_skip'],
-                               'skip_thresh':codec.eval_params['skip_thresh']}
-                if not temporal_prediction:
-                    res_coding_info, skip = codec.generator.compress_spatial_residual(residual_frame,prev_latent, **eval_params)
+                eval_params = {'rate_idx': input_data.eval_params['rd_point'],
+                            'q_value':input_data.eval_params['q_value'],
+                            'use_skip': input_data.eval_params['use_skip'],
+                            'skip_thresh':input_data.eval_params['skip_thresh']}
+                
+                if idx == 1:
+                    res_coding_info, skip = models.animation_model.compress_spatial_residual(residual_frame,prev_latent, **eval_params)     
+                    prev_res_hat = res_coding_info['res_hat']
                 else:
-                    if idx == 1:
-                        res_coding_info, skip = codec.generator.compress_temporal_residual(residual_frame,prev_latent, **eval_params)     
-                    else:
-                        temporal_residual = residual_frame - prev_res_hat
-                        res_coding_info, skip = codec.generator.compress_spatial_residual(temporal_residual,prev_latent, **eval_params)
-                        if not skip:
-                            res_coding_info['res_hat'] = res_coding_info['res_hat']+prev_res_hat
-                                
+                    temporal_residual_frame = residual_frame - prev_res_hat
+                    res_coding_info, skip = models.animation_model.compress_temporal_residual(temporal_residual_frame,prev_latent, **eval_params)
+                    if not skip:
+                        prev_res_hat = (res_coding_info['res_hat']+prev_res_hat)   
+
                 if not skip:
                     prev_latent = res_coding_info['prev_latent']
-                    prev_res_hat = res_coding_info['res_hat']
-                    codec = update_bits_and_time(codec, res_coding_info)
+                    output_data.update_bits_and_time(res_coding_info)
                     enh_prediction = (animated_frame + prev_res_hat).clamp(0,1)
                 else:
                     enh_prediction = (animated_frame + prev_res_hat).clamp(0,1)
 
-                codec.animated_video.append(tensor2frame(animated_frame))
-                codec.decoded_video.append(tensor2frame(enh_prediction))
-
+                output_data.animated_video.append(tensor2frame(animated_frame))
+                output_data.decoded_video.append(tensor2frame(enh_prediction))
+                
                 viz_params = {'reference_frame':reference_frame,
-                              'target_frame':target_frame,
-                              'res': residual_frame,
-                              'res_hat': prev_res_hat,
-                              'prediction': animated_frame,
-                              'enhanced_prediction':enh_prediction,
-                              **anim_params}
+                                'target_frame':target_frame,
+                                'res': residual_frame,'res_hat': prev_res_hat,
+                                'prediction': animated_frame,'enhanced_prediction':enh_prediction,
+                                **anim_params}
 
                 viz_img = visualizer.visualize(**viz_params)
-                codec.visualization.append(viz_img)
-    return codec
+                output_data.visualization.append(viz_img)
+    return output_data
 
-def test(config,dataset,generator, kp_detector,**kwargs ):
+def test(config,dataset,animation_model_arch, kp_detector_arch,**kwargs ):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model_id = kwargs['model_id']
     num_frames = config['eval_params']['num_frames']
@@ -428,26 +411,24 @@ def test(config,dataset,generator, kp_detector,**kwargs ):
 
 
         if pretrained_cpk_path is not None:
-            generator = load_pretrained_model(generator, path=pretrained_cpk_path, device=device)
-            kp_detector = load_pretrained_model(kp_detector, path=pretrained_cpk_path,name='kp_detector',device=device)
+            animation_model = load_pretrained_model(animation_model_arch, path=pretrained_cpk_path, device=device)
+            kp_detector_model = load_pretrained_model(kp_detector_arch, path=pretrained_cpk_path,name='kp_detector',device=device)
 
-        generator.eval()
+        animation_model.eval()
         temporal_prediction = False
         if 'rdac' in model_id:
-            generator.sdc.update()
-            if config['model_params']['generator_params']['temporal_residual_learning']:
-                generator.tdc.update()
-                temporal_prediction = True
+            animation_model.sdc.update(force=True)
+            animation_model.tdc.update(force=True)
 
-        kp_detector.eval()
+        kp_detector_model.eval()
         if torch.cuda.is_available():
-            generator = generator.cuda()
-            kp_detector = kp_detector.cuda()
+            animation_model = animation_model.cuda()
+            kp_detector_model= kp_detector_model.cuda()
 
         reference_image_coder = ImageCoder(config['eval_params']['qp'],config['eval_params']['ref_codec'])
         motion_kp_coder = KpEntropyCoder()
 
-        codec = AnimationCodec(generator, kp_detector, reference_image_coder, motion_kp_coder,config['eval_params'])
+        models = Models(animation_model, kp_detector_model, reference_image_coder, motion_kp_coder)    
 
         all_metrics = {}
         with torch.no_grad():
@@ -455,39 +436,40 @@ def test(config,dataset,generator, kp_detector,**kwargs ):
                 video = x['video']
                 N,h,w,c = video.shape
                 n_frames = min(num_frames, N)
+                input_data = Inputs(config['eval_params'])
+                
                 #update codec params for this sequence
-                codec.num_frames = n_frames
-                codec.video = video
-                codec.create_gops()
+                input_data.num_frames = n_frames
+                input_data.video = video
+                input_data.create_gops()
                 name = x['name']
                 out_path = os.path.join(kwargs['log_dir'],name[0].split('.')[0])
                 if not os.path.exists(out_path):
                     os.makedirs(out_path)
 
                 if model_id == 'dac':
-                    codec = animation_coder(codec, visualizer)
+                    output_data = animation_coder(models,input_data, visualizer)
                 elif model_id == 'hdac':
-                    codec = hybrid_coder(codec, visualizer)
-                elif model_id == 'rdac':
-                    codec = predictive_coder(codec, visualizer, temporal_prediction)
+                    output_data = hybrid_coder(models,input_data, visualizer)
+                elif model_id  == 'rdac':
+                    output_data = predictive_coder(models,input_data, visualizer)
                 else:
                     raise NotImplementedError(f"Codec of type <{model_id}> is not Available!")
                 
-                imageio.mimsave(f"{out_path}/{rd_point}_enh_video.mp4",codec.decoded_video, fps=10)
-                imageio.mimsave(f"{out_path}/{rd_point}_viz.mp4",codec.visualization, fps=10)
+                imageio.mimsave(f"{out_path}/{rd_point}_enh_video.mp4",output_data.decoded_video, fps=10)
+                imageio.mimsave(f"{out_path}/{rd_point}_viz.mp4",output_data.visualization, fps=10)
                 
-                if len(codec.animated_video)== len(codec.decoded_video):
-                    comp_vid = np.concatenate((np.array(codec.original_video),np.array(codec.animated_video),np.array(codec.decoded_video)), axis=2)
+                if len(output_data.animated_video)== len(output_data.decoded_video):
+                    comp_vid = np.concatenate((np.array(input_data.original_video),np.array(output_data.animated_video),np.array(output_data.decoded_video)), axis=2)
                 else:
-                    comp_vid = np.concatenate((np.array(codec.original_video),np.array(codec.decoded_video)), axis=2)
+                    comp_vid = np.concatenate((np.array(input_data.original_video),np.array(output_data.decoded_video)), axis=2)
                 
                 imageio.mimsave(f"{out_path}/{rd_point}_anim_enh.mp4",comp_vid, fps=10)
 
-                metrics = monitor.compute_metrics(codec.original_video,codec.decoded_video)
-                metrics.update({'bitrate':codec.get_bitrate()})
+                metrics = monitor.compute_metrics(input_data.original_video,output_data.decoded_video)
+                metrics.update({'bitrate':output_data.get_bitrate(input_data.fps, input_data.num_frames)})
                 all_metrics[name[0]] = metrics
                 print(metrics)
-                codec.reset()
         with open(f"{kwargs['log_dir']}/metrics_{rd_point}.json", 'w') as f:
             json.dump(all_metrics, f, indent=4)
     else:
@@ -515,218 +497,4 @@ def test(config,dataset,generator, kp_detector,**kwargs ):
         with open(f"{kwargs['log_dir']}/metrics_{codec.qp}.json", 'w') as f:
             json.dump(all_metrics, f, indent=4)
 
-            
-    
-  
-
-            
-
-
-
-# class Codec:
-#     def __init__(self,generator: Generator, kp_detector: KPD, 
-#                  image_coder: ImageCoder, kp_coder: KpEntropyCoder) -> None:
-#         self.generator = generator 
-#         self.kp_detector = kp_detector
-#         self.image_coder = image_coder
-#         self.kp_coder = kp_coder
-#         self.num_frames = -1
-#         self.fps = 10
-#         self.video = None
-#         self.total_bits = 0
-#         self.enc_time = 0
-#         self.dec_time = 0
-
-#         self.original_video = []
-#         self.decoded_video = []
-#         self.visualization = []
-#         self.animated_video = []
-
-#     def reset(self)-> None:
-#         self.num_frames= -1
-#         self.video = None
-#         self.total_bits = 0
-#         self.enc_time = 0
-#         self.dec_time = 0
-
-#         self.original_video = []
-#         self.decoded_video = []
-#         self.visualization = []
-#         self.animated_video = []
-
-#     def get_bitrate(self, fps=None):
-#         '''Returns the bitrate of the compressed video'''
-#         if fps is None:
-#             fps = self.fps
-#         return ((self.total_bits*fps)/(1000*self.num_frames))
-    
-
-# def update_bits_and_time(codec,info):
-#     codec.total_bits += info['bitstring_size']
-#     codec.enc_time += info['time']['enc_time']
-#     codec.dec_time += info['time']['dec_time']
-#     return codec
-
-# def animation_coder(codec, visualizer: Visualizer):
-#     org_reference = frame2tensor(codec.video[:,0,:,:], cuda=False)
-#     codec.original_video.append(tensor2frame(org_reference))
-
-#     dec_reference_info = codec.image_coder(org_reference)
-#     codec = update_bits_and_time(codec, dec_reference_info)
-
-#     reference_frame = dec_reference_info['decoded']
-#     kp_reference = codec.kp_detector(reference_frame)
-#     codec.kp_coder.kp_reference = kp_reference
-    
-#     codec.decoded_video.append(tensor2frame(reference_frame))
-#     codec.animated_video.append(tensor2frame(reference_frame))
-
-#     for idx in trange(1,codec.num_frames):
-#         target_frame = frame2tensor(codec.video[:,idx,:,:])
-#         codec.original_video.append(tensor2frame(target_frame))
-#         kp_target = codec.kp_detector(target_frame)
-
-#         kp_coding_info = codec.kp_coder.encode_kp(kp_target = kp_target)
-#         codec = update_bits_and_time(codec, kp_coding_info)
-
-#         kp_target_hat = kp_coding_info['kp_hat']
-#         #animation and residual coding
-#         anim_params = {'kp_reference':kp_reference,'kp_target':kp_target_hat}
-#         animated_frame = codec.generator.animate(reference_frame, **anim_params)
-#         residual_frame = target_frame-animated_frame
-#         codec.decoded_video.append(tensor2frame(animated_frame))
-
-#         viz_params = {'reference_frame':reference_frame,
-#                         'target_frame':target_frame,
-#                         'res': residual_frame,
-#                         **anim_params,
-#                         'prediction': animated_frame}
         
-#         viz_img = visualizer.visualize(**viz_params)
-#         codec.visualization.append(viz_img)
-#     return codec
-
-# def hybrid_coder(codec, visualizer: Visualizer,method='rdac'):
-#     org_reference = frame2tensor(codec.video[:,0,:,:], cuda=False)
-#     codec.original_video.append(tensor2frame(org_reference))
-
-#     dec_reference_info = codec.image_coder(org_reference)
-#     codec = update_bits_and_time(codec, dec_reference_info)
-
-#     reference_frame = dec_reference_info['decoded']
-#     if torch.cuda.is_available():
-#         reference_frame = reference_frame.cuda()
-
-#     kp_reference = codec.kp_detector(reference_frame)
-#     codec.kp_coder.kp_reference = kp_reference
-    
-#     codec.decoded_video.append(tensor2frame(reference_frame))
-#     codec.animated_video.append(tensor2frame(reference_frame))
-
-#     for idx in trange(1,codec.num_frames):
-#         target_frame = frame2tensor(codec.video[:,idx,:,:])
-#         codec.original_video.append(tensor2frame(target_frame))
-#         kp_target = codec.kp_detector(target_frame)
-
-#         kp_coding_info = codec.kp_coder.encode_kp(kp_target = kp_target)
-#         codec = update_bits_and_time(codec, kp_coding_info)
-
-#         kp_target_hat = kp_coding_info['kp_hat']
-#         # weight_map = generate_weight_map(kp_target_hat['value'],(256,256))
-        
-#         #animation and residual coding
-#         anim_params = {'kp_reference':kp_reference,'kp_target':kp_target_hat}
-#         animated_frame = codec.generator.animate(reference_frame, **anim_params)
-#         residual_frame = target_frame-animated_frame
-#         res_coding_info = codec.generator.compress_residual(residual_frame)
-#         codec = update_bits_and_time(codec, res_coding_info)
-#         enh_prediction = (animated_frame + res_coding_info['res_hat']).clamp(0,1)
-
-#         codec.animated_video.append(tensor2frame(animated_frame))
-#         codec.decoded_video.append(tensor2frame(enh_prediction))
-
-#         viz_params = {'reference_frame':reference_frame,
-#                         'target_frame':target_frame,
-#                         'res': residual_frame,
-#                         'res_hat': res_coding_info['res_hat'],
-#                         **anim_params,
-#                         'prediction': animated_frame,
-#                         'enhanced_prediction':enh_prediction}
-#         viz_img = visualizer.visualize(**viz_params)
-#         codec.visualization.append(viz_img)
-#     return codec
-
-# def test(config,dataset:Dataset,generator:Generator, kp_detector:KPD,**kwargs ):
-#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-#     model_id = kwargs['model_id']
-#     num_frames = config['eval_params']['num_frames']
-
-#     #get a pretrained dac_model based on current rdac config
-#     pretrained_cpk_path = kwargs['checkpoint']
-#     rd_point = 1
-#     if pretrained_cpk_path is not None:
-#         generator = load_pretrained_model(generator, path=pretrained_cpk_path, device=device)
-#         kp_detector = load_pretrained_model(kp_detector, path=pretrained_cpk_path,name='kp_detector',device=device)
-#         rd_point = get_rd_point(pretrained_cpk_path)
-#     generator.eval()
-    
-#     if model_id == 'rdac':
-#         generator.sdc.update()
-    
-#     if 'rdac_t' in model_id:
-#         generator.tdc.update()
-
-
-#     kp_detector.eval()
-#     if torch.cuda.is_available():
-#         generator = generator.cuda()
-#         kp_detector = kp_detector.cuda()
-
-#     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=2, drop_last=True)
-#     visualizer = Visualizer(**config['visualizer_params'])
-#     monitor = Metrics(config['eval_params']['metrics'],config['eval_params']['temporal'])
-#     reference_image_coder = ImageCoder(config['eval_params']['qp'],config['eval_params']['ref_codec'])
-#     motion_kp_coder = KpEntropyCoder()
-
-#     codec = Codec(generator, kp_detector, reference_image_coder, motion_kp_coder)
-
-#     all_metrics = {}
-#     with torch.no_grad():
-#         for x in dataloader:
-#             video = x['video']
-#             _, N, _, _, _ = video.shape
-#             n_frames = min(num_frames, N)
-#             #update codec params for this sequence
-#             codec.num_frames = n_frames
-#             codec.video = video
-
-#             name = x['name']
-#             out_path = os.path.join(kwargs['log_dir'],name[0].split('.')[0])
-#             if not os.path.exists(out_path):
-#                 os.makedirs(out_path)
-
-#             if model_id == 'dac':
-#                 codec = animation_coder(codec, visualizer)
-#             elif model_id == 'rdac':
-#                 codec = hybrid_coder(codec, visualizer, method=model_id)
-
-#             imageio.mimsave(f"{out_path}/enh_video.mp4",codec.decoded_video, fps=10)
-#             imageio.mimsave(f"{out_path}/viz.mp4",codec.visualization, fps=10)
-            
-#             if len(codec.animated_video)== len(codec.decoded_video):
-#                 comp_vid = np.concatenate((np.array(codec.original_video),np.array(codec.animated_video),np.array(codec.decoded_video)), axis=1)
-#             else:
-#                 comp_vid = np.concatenate((np.array(codec.original_video),np.array(codec.decoded_video)), axis=1)
-            
-#             imageio.mimsave(f"{out_path}/anim_enh.mp4",comp_vid, fps=10)
-            
-#             metrics = monitor.compute_metrics(codec.original_video,codec.decoded_video)
-#             metrics.update({'bitrate':codec.get_bitrate()})
-#             all_metrics[name[0]] = metrics
-#             codec.reset()
-            
-#     with open(f"{kwargs['log_dir']}/metrics.json", 'w') as f:
-#         json.dump(all_metrics, f, indent=4)
-  
-
-            

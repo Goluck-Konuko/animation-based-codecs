@@ -11,7 +11,7 @@ class KPD(nn.Module):
     """
     def __init__(self, block_expansion=64, num_kp=10, num_channels=3, max_features=512,
                  num_blocks=3, temperature=0.1, estimate_jacobian=False, scale_factor=1,
-                 pad=3,quantize=True):
+                 pad=3):
         super(KPD, self).__init__()
 
         self.predictor = Hourglass(block_expansion, in_features=num_channels,

@@ -43,20 +43,24 @@ def deconv(in_channels, out_channels, kernel_size=5, stride=2):
 
 
 class DifferenceCoder(CompressionModel):
+    '''Customized Mean-scale hyperprior model.
+        - Low entropy bottleneck for low-bitrate coding of frame residuals.
+        - Variable bitrate entropy modeling for single model training covering the target range of low bitrates
+    '''
     def __init__(self,in_ft,out_ft, N, M, scale_factor=1,**kwargs):
         super(DifferenceCoder, self).__init__()
         self.g_a = nn.Sequential(
                     conv(in_ft, N),nn.ReLU(inplace=True),
                     conv(N, N),nn.ReLU(inplace=True),
-                    conv(N,N),nn.ReLU(inplace=True),
-                    conv(N,N),nn.ReLU(inplace=True),
+                    conv(N, N),nn.ReLU(inplace=True),
+                    conv(N, N),nn.ReLU(inplace=True),
                     conv(N, M))
         
         self.g_s = nn.Sequential(
                     deconv(M, N),nn.ReLU(inplace=True),
                     deconv(N, N),nn.ReLU(inplace=True),
-                    deconv(N,N),nn.ReLU(inplace=True),
-                    deconv(N,N),nn.ReLU(inplace=True),
+                    deconv(N, N),nn.ReLU(inplace=True),
+                    deconv(N, N),nn.ReLU(inplace=True),
                     deconv(N, out_ft))
         
         self.h_a = nn.Sequential(

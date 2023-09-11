@@ -26,7 +26,6 @@ model_params:
     max_features: 1024
     scale_factor: 0.25
     num_blocks: 5
-    quantize: True
   generator_params:
     block_expansion: 64
     max_features: 512
