@@ -33,7 +33,7 @@ Use ```--mode test``` at inference time with the same config file after changing
 
 
 ### Pre-trained checkpoint
-Checkpoints can be found under following link: [google-drive](https://drive.google.com/drive/folders/1DNcgE0ytZiFWoATB6VqdANpLmoYqqOJN?usp=drive_link). Download and place in the ```checkpoints/``` directory.
+Checkpoints can be found under following link: [google-drive](https://drive.google.com/drive/folders/1_jIt9Bg-o_1-8_11DkVuHBvqHQH5e4tS?usp=drive_link). Download and place in the ```checkpoints/``` directory.
 
 
 
