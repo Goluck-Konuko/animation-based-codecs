@@ -4,6 +4,9 @@ dataset_params:
   base_layer_dir: datasets/hevc
   frame_shape: [256, 256, 3]
   base_layer: True
+   base_layer_params:
+    dir: ../datasets/hevc
+    qp_values: {'50': 1.1,'46': 1.4, '42': 1.8, '40': 2.2}
   num_sources: 2
   augmentation_params:
     flip_param:
