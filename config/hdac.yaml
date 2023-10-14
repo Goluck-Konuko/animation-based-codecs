@@ -4,7 +4,7 @@ dataset_params:
   base_layer_dir: datasets/hevc
   frame_shape: [256, 256, 3]
   base_layer: True
-   base_layer_params:
+  base_layer_params:
     dir: ../datasets/hevc
     qp_values: {'50': 1.1,'46': 1.4, '42': 1.8, '40': 2.2}
   num_sources: 2
@@ -51,11 +51,11 @@ model_params:
 
 train_params:
   num_epochs: 50
-  num_repeats: 1
+  num_repeats: 5
   epoch_milestones: []
   lr: 2.0e-4
   lr_discriminator: 2.0e-4
-  batch_size: 1
+  batch_size: 36
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   step_wise: False # set to true to train each component independently i.e. DAC -> HDAC | RDAC

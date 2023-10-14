@@ -50,11 +50,11 @@ model_params:
 
 train_params:
   num_epochs: 50
-  num_repeats: 1
+  num_repeats: 5
   epoch_milestones: []
   lr: 2.0e-4
   lr_discriminator: 2.0e-4
-  batch_size: 1
+  batch_size: 36
   scales: [1, 0.5, 0.25, 0.125]
   rd_lambda: [0.05,0.1,0.2,0.3,0.5,0.7,0.9,1.4]
   target_rate: 2
