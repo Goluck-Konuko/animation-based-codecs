@@ -18,6 +18,7 @@ wandb
 av
 compressai
 psnr-hvm
+dists-pytorch
 piq
 lpips
 
