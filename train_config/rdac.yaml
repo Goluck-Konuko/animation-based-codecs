@@ -1,0 +1,103 @@
+dataset_params:
+  train_dir: ../datasets/VoxCeleb/train
+  test_dir: ../datasets/VoxCeleb/test
+  cpk_path: '' #Initialize with model from previous training step[ step 1- dac model, step 2- rdac without refinement]
+  frame_shape: [256, 256, 3]
+  num_sources: 3 #Number of samples (minimum==3 to train the temporal difference coder)
+  target_delta: 1 #spacing between the animated frames
+  augmentation_params:
+    flip_param:
+      horizontal_flip: False
+      time_flip: False
+    jitter_param:
+      brightness: 0.1
+      contrast: 0.1
+      saturation: 0.1
+      hue: 0.1
+
+model_params:
+  common_params:
+    num_kp: 10
+    num_channels: 3
+  kp_detector_params:
+    temperature: 0.1
+    block_expansion: 32
+    max_features: 1024
+    scale_factor: 0.25
+    num_blocks: 5
+    quantize: False
+  generator_params:
+    block_expansion: 64
+    max_features: 512
+    num_down_blocks: 2
+    num_bottleneck_blocks: 6
+    estimate_occlusion_map: True
+    motion_compensation: True #Train with keypoint motion compensation of frame residuals
+    ref_coder: True
+    dense_motion_params:
+      block_expansion: 64
+      max_features: 1024
+      num_blocks: 5
+      scale_factor: 0.25
+    iframe_params:
+      variable_bitrate: True
+      levels: 7
+      scale_factor: 1
+      input_resolution: [256,256]
+    residual_coder_params:
+      residual_type: 'residual' # [residual, conditional_residual]
+      residual_features: 48
+      variable_bitrate: True #Train a single model that can reconstruct the frame residuals at (levels-1) bitrates
+      levels: 5
+      scale_factor: 1 #subsampling factor for the frame residual coding #Set to 1 at training time
+      num_intermediate_layers: 3 #upsampling/downsampling blocks in the compression VAE
+      residual_coding: True # Set to False when training the animation-only step
+      temporal_residual_coding: True #encode the temporal residual difference
+    refinement_network_params:
+      gen_rec: True
+      in_channel: 3 
+      out_channel: 3 
+      block_expansion: 64
+  discriminator_params:
+    scales: [1]
+    block_expansion: 32
+    max_features: 512
+    num_blocks: 4
+    use_kp: True
+    disc_type: 'multi_scale' #Use multiscale discriminator formulation ['multi_scale','patch_gan_disc']
+
+
+train_params:
+  step: 0 # [STEP 0: End to end training, STEP 1 - Train residual coding, STEP 2 - Train Refinement network]
+  num_epochs: 30 #[STEP 0 --> 30 Epochs, STEP 1 --> 20 Epochs, STEP 2 --> 10 EPOCHS ]
+  num_repeats: 10
+  epoch_milestones: []
+  lr: 2.0e-4
+  lr_aux: 1.0e-4
+  lr_discriminator: 2.0e-4
+  betas: [0.5, 0.999]
+  batch_size: 1
+  scales: [1, 0.5, 0.25, 0.125]
+  rd_lambda: [0.05,0.1,0.2,0.4,0.8,1.2]#lambda values for training the residual coding networks
+  target_rate: 2
+  checkpoint_freq: 1
+  transform_params:
+    sigma_affine: 0.05
+    sigma_tps: 0.005
+    points_tps: 5
+  loss_weights:
+    generator_gan: 1
+    discriminator_gan: 1
+    feature_matching: [10, 10, 10, 10]
+    perceptual: [10, 10, 10, 10, 10]
+    equivariance_value: 10
+    style_loss: 0
+
+reconstruction_params:
+  num_videos: 1000
+  format: ".mp4"
+
+visualizer_params:
+  kp_size: 5
+  draw_border: True
+  colormap: "gist_rainbow"

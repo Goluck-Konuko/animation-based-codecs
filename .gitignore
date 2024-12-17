@@ -7,8 +7,11 @@ results/
 
 cpks/
 
-conventional_codecs/hevc_hm
-conventional_codecs/vtm
-conventional_codecs/vvenc
-conventional_codecs/vvdec
+log/
+
+hevc_logs/
+
+utilities/anchors/hevc_hm
+utilities/anchors/vtm
+configure.py
 

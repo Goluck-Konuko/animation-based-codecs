@@ -1,0 +1,92 @@
+dataset_params:
+  train_dir: ../datasets/VoxCeleb/train
+  test_dir: ../datasets/VoxCeleb/test
+  cpk_path: '' #path to checkpoint to resume training
+  frame_shape: [256, 256, 3] #Video frame dimensions
+  num_sources: 4 #Number of frames per video sample in batch [Num. of references = num_sources-1]
+  target_delta: 1 #Minimum spacing between frames if num_sources>2
+  augmentation_params:
+    flip_param:
+      horizontal_flip: False 
+      time_flip: False
+    jitter_param:
+      brightness: 0.1
+      contrast: 0.1
+      saturation: 0.1
+      hue: 0.1
+
+model_params:
+  common_params:
+    num_kp: 10 #Number of motion keypoints
+    num_channels: 3
+  kp_detector_params:
+    temperature: 0.1
+    block_expansion: 32
+    max_features: 1024
+    scale_factor: 0.25
+    num_blocks: 5
+    quantize: False #Set to True for training
+  generator_params:
+    block_expansion: 64
+    max_features: 512
+    num_down_blocks: 2
+    num_bottleneck_blocks: 6
+    estimate_occlusion_map: True
+    use_ref_weights: True
+    use_contrastive_loss: True
+    ref_coder: True
+    dense_motion_params:
+      block_expansion: 64
+      max_features: 1024
+      num_blocks: 5
+      scale_factor: 0.25
+    iframe_params:
+      variable_bitrate: True
+      levels: 7
+      scale_factor: 1
+      input_resolution: [256,256]
+  discriminator_params:
+    scales: [1]
+    block_expansion: 32
+    max_features: 512
+    num_blocks: 4
+    use_kp: True
+    disc_type: 'multi_scale'
+
+train_params:
+  num_epochs: 50
+  num_repeats: 10
+  epoch_milestones: []
+  lr : 2.0e-4
+  batch_size: 1 #2x46GB A40 GPUs
+  scales: [1, 0.5, 0.25, 0.125]
+  checkpoint_freq: 1
+  transform_params:
+    sigma_affine: 0.05
+    sigma_tps: 0.005
+    points_tps: 5
+  loss_weights:
+    generator_gan: 1
+    discriminator_gan: 1
+    feature_matching: [10, 10, 10, 10]
+    perceptual: [10, 10, 10, 10, 10]
+    equivariance_value: 10
+    mse_loss: 0
+    contrastive_loss: 0.00001
+
+reconstruction_params:
+  num_videos: 1000
+  format: ".mp4"
+
+animate_params:
+  num_pairs: 50
+  format: ".mp4"
+  normalization_params:
+    adapt_movement_scale: False
+    use_relative_movement: True
+    use_relative_jacobian: True
+
+visualizer_params:
+  kp_size: 5
+  draw_border: True
+  colormap: "gist_rainbow"

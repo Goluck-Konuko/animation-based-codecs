@@ -1,6 +1,3 @@
-import matplotlib
-matplotlib.use('Agg')
-
 import torch
 import os
 import yaml
@@ -8,13 +5,12 @@ from shutil import copy
 from argparse import ArgumentParser
 from time import gmtime, strftime
 import models
-import utils
-from train import train
-from test import test
+from train import train_functions
+from test import test_functions
+from utilities.utils.dataset import FramesDataset,HDACFramesDataset,MRFramesDataset
 
 
 if __name__ == "__main__":
-    
     parser = ArgumentParser()
     parser.add_argument("--config", 
                         required=True, 
@@ -25,7 +21,7 @@ if __name__ == "__main__":
                         choices=["train", "compress","test"])
     
     parser.add_argument("--project_id", 
-                        default='RDAC', 
+                        default='Animation-Based-Codecs', 
                         help="project name")
     
     parser.add_argument("--log_dir", 
@@ -41,10 +37,6 @@ if __name__ == "__main__":
                         type=lambda x: list(map(int, x.split(','))),
                         help="Names of the devices comma separated.")
     
-    parser.add_argument("--num_features", 
-                        default=48,type=int, 
-                        help="number of features in the RDAC Difference coder")
-    
     parser.add_argument("--verbose", 
                         dest="verbose", 
                         action="store_true", 
@@ -56,14 +48,9 @@ if __name__ == "__main__":
                         action="store_true", 
                         help="Test on one batch to debug")
     
-    parser.add_argument("--rate", 
-                        default=6,
-                        type=int,
-                        help="target bitrate | 5 bitrates [0-6]")
-    
     parser.add_argument("--num_workers", 
                             dest="num_workers", 
-                            default=2, type=int, 
+                            default=4, type=int, 
                             help="num of cpu cores for dataloading")
     
     parser.set_defaults(verbose=False)
@@ -79,50 +66,45 @@ if __name__ == "__main__":
             log_dir = os.path.join(*os.path.split(opt.checkpoint)[:-1])
         else:
             log_dir = os.path.join(opt.log_dir, os.path.basename(opt.config).split('.')[0])
-            if 'rdac' in model_id:
-                log_dir += f"_{opt.num_features}_{opt.rate}"
             log_dir += '_'+ strftime("%d_%m_%y_%H_%M_%S", gmtime())
     else:
-        log_dir = os.path.join(opt.log_dir, model_id,opt.checkpoint.split('/')[-1].split('.')[0])
-    #import Generator module
-    config['train_params']['target_rate'] = opt.rate
-    config['model_params']['generator_params'].update({'residual_features': opt.num_features})
+        log_dir = os.path.join(opt.log_dir, model_id)
+ 
     generator_params = {
         **config['model_params']['common_params'],
         **config['model_params']['generator_params']}
 
+    generator = models.generators[model_id](**generator_params)
+    print(f"##..{generator.__class__.__name__} LOADED..##")
     
-    if model_id =='dac':
-        generator = models.GeneratorDAC(**generator_params)
-
-    elif model_id =='hdac':
-        generator = models.GeneratorHDAC(**generator_params) 
-
-    elif model_id == 'rdac':
-        generator = models.GeneratorRDAC(**generator_params)
-    else:
-        raise Exception("Unknown model architecture!! CHOOSE FROM : [dac,hdac,rdac,rdac_temporal,rdac_temporal_comp, rdac_temporal_comp_mv]")
-    
-    print(f"Using: {generator.__class__.__name__}")
-
     if torch.cuda.is_available():
         generator.to(opt.device_ids[0])
-
-    kp_detector = models.KPD(**config['model_params']['common_params'],
-                             **config['model_params']['kp_detector_params'])
+    
+    
+    kpd_params = {**config['model_params']['common_params'],
+                    **config['model_params']['kp_detector_params']}
+    kp_detector = models.kp_detectors[model_id](**kpd_params)
     if torch.cuda.is_available():
         kp_detector.to(opt.device_ids[0])
 
-    #import discriminator
-    if config['train_params']['adversarial_training']:
-        discriminator = models.MultiScaleDiscriminator(**config['model_params']['common_params'],
-                                                       **config['model_params']['discriminator_params'])
-        if torch.cuda.is_available():
-            discriminator.to(opt.device_ids[0])
-    else:
-        discriminator = None    
+    disc_params = {**config['model_params']['common_params'],
+                    **config['model_params']['discriminator_params']}
+    discriminator = models.MultiScaleDiscriminator(**disc_params)
+    
+    if torch.cuda.is_available():
+        discriminator = discriminator.to(opt.device_ids[0])
 
-    dataset = utils.FramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
+    dataset = FramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
+    if model_id in ['mvac','mrdac']:
+        print("Loading Multiple reference Training Dataset..")
+        dataset = MRFramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
+    elif model_id in ['hdac','hdac_hf']:
+        print("Loading Hybrid animation training dataset..(Frame samples and base layer)")
+        dataset = HDACFramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
+    else:
+        print("Loading  Animation Training Dataset ...")
+        dataset = FramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
+
     if opt.mode == 'train':
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
@@ -139,12 +121,15 @@ if __name__ == "__main__":
                     'device_ids': opt.device_ids,
                     'num_workers': opt.num_workers}
 
-        train(config,dataset, generator,kp_detector,discriminator, **params)
+        train_functions[model_id](config,dataset, generator,kp_detector,discriminator, **params)
+    
     elif opt.mode == 'test':
         params = {  'model_id':model_id,
                     'checkpoint': opt.checkpoint, 
                     'log_dir': log_dir}
-        test(config,dataset, generator,kp_detector, **params)
+        ## TO-DO 
+        ## Implement a unified test interface for the GFVC methods
+        test_functions[model_id](config,dataset, generator,kp_detector, **params)
 
 
     

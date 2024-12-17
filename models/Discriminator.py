@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .modules.train_utils import ImagePyramide
+from .common.train_utils import ImagePyramide
 
 
 def detach_kp(kp):
