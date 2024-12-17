@@ -1,61 +1,92 @@
-# Ultra-low bitrate video compression using deep animation models
+# Ultra-low Bitrate Video Compression Using Deep Animation Models
 
-This repository contains the source code for the papers
-[ULTRA-LOW BITRATE VIDEO CONFERENCING USING DEEP IMAGE ANIMATION](https://arxiv.org/abs/2012.00346v1),
-[A HYBRID DEEP ANIMATION CODEC FOR LOW-BITRATE VIDEO CONFERENCING](https://arxiv.org/abs/2207.13530) and 
-[PREDICTIVE CODING FOR ANIMATION-BASED VIDEO COMPRESSION](https://arxiv.org/abs/2307.04187)
+Welcome to the repository for **Ultra-low Bitrate Video Compression Using Deep Animation Models**. This codebase implements methods and models described in cutting-edge research on low-bitrate video conferencing and animation-based video compression. The repository is designed to serve researchers and developers interested in leveraging deep learning for video compression.
 
+---
 
-## Installation
+## 📚 Related Publications
+This repository accompanies the following papers:
 
-We support ```python3```. To install the dependencies run:
-```
+1. **[Ultra-Low Bitrate Video Conferencing Using Deep Image Animation](https://arxiv.org/abs/2012.00346v1)**
+2. **[A Hybrid Deep Animation Codec for Low-Bitrate Video Conferencing](https://ieeexplore.ieee.org/abstract/document/10458867)**
+3. **[Improving Reconstruction Fidelity in Generative Face Video Coding Using High-Frequency Shuttling](https://ieeexplore.ieee.org/abstract/document/10458867)**
+4. **[Predictive Coding for Animation-Based Video Compression](https://ieeexplore.ieee.org/abstract/document/10222205)**
+5. **[Improved Predictive Coding for Animation-Based Video Compression](https://ieeexplore.ieee.org/abstract/document/10772980)**
+6. **[Multi-Reference Generative Face Video Compression with Contrastive Learning](https://arxiv.org/html/2409.01029v1)**
+
+---
+
+## ⚙️ Installation
+This repository supports Python 3. To set up the environment, clone this repository and install the required dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
 
-## Assets
-### YAML Config
-Describes the configuration settings for for training and testing the models. 
-See ```config/dac.yaml```, ```config/hdac.yaml```,```config/rdac.yaml```.
-Use ```--mode test``` at inference time with the same config file after changing the ```eval_params``` appropriately.
+---
 
+## 📂 Assets
+
+### YAML Configuration
+The YAML configuration files are used to define the settings for training and testing the models. Example files are located in the `train/test config` directory:
+- `[train/test]_config/dac.yaml`
+- `[train/test]_config/hdac.yaml`
+- `[train/test]_config/rdac.yaml`
+
+During inference, use the `--mode test` flag with the same configuration file after updating the `eval_params` section appropriately.
 
 ### Datasets
- 	**VoxCeleb**. Please follow the instruction from https://github.com/AliaksandrSiarohin/video-preprocessing.
+- **VoxCeleb**: Follow the instructions in the [video-preprocessing repository](https://github.com/AliaksandrSiarohin/video-preprocessing) to prepare the dataset.
+- **Creating Your Own Videos**: Ensure that input videos are cropped to focus on the speaker’s face at a resolution of 256x256 pixels. (Support for higher resolutions is under development.)
+- **Pre-processed Videos (256x256 px)**: Pre-processed videos are available for download from our [Google Drive link](https://drive.google.com/drive/folders/1g0U1ZCTszm3yrmIewg7FahXsxyMBfxKj?usp=sharing). Place these videos in the following folders:
+  - `datasets/train`
+  - `datasets/inference`
 
- 	**Creating your own videos**. 
- 	The input videos should be cropped to target the speaker's face at a resolution of 256x256 (Updates are underway to add higher resolution). 
+### Evaluation Metrics
+Our metrics module incorporates suggestions from **JPEG-AI** alongside popular quantitative metrics used in computer vision. Supported metrics include:
+- `psnr`, `psnr-hvs`, `fsim`, `iw_ssim`, `ms_ssim`
+- `vif`, `nlpd`, `vmaf`, `lpips`, `msVGG`
 
-    **Pre-processed videos (256x256 px)**
-    We provide preprocessed videos at the following link: [google-drive](https://drive.google.com/drive/folders/1g0U1ZCTszm3yrmIewg7FahXsxyMBfxKj?usp=sharing)
+---
 
-    Download put the videos in ```datasets/train``` and ```datasets/inference``` folders.
+## 🚀 Training
+To train a model, update the relevant parameters in the corresponding `train_config/[MODEL_NAME].yaml` file or use the default configuration (to reproduce our results). Run the following command:
 
+```bash
+bash training_script.sh [MODEL_NAME]
+```
 
-### Pre-trained checkpoint
-Checkpoints can be found under following link: [google-drive](https://drive.google.com/drive/folders/1_jIt9Bg-o_1-8_11DkVuHBvqHQH5e4tS?usp=drive_link). Download and place in the ```checkpoints/``` directory.
+> **Note:** The default setup requires 2 x A40 GPUs. Adjust the batch size in the configuration file if using a different hardware setup.
 
+---
 
+## 🧪 Testing
+To test a model, update the `eval_params` in the corresponding `test_config/[MODEL_NAME].yaml` file and run:
 
-#### Metrics
-We include a metrics module combining the suggestions from JPEG-AI with popular quantiative metrics used in computer vision and beyond.
-Supported metrics: 'psnr', 'psnr-hvs','fsim','iw_ssim','ms_ssim','vif','nlpd', 'vmaf','lpips'
+```bash
+bash test_script.sh [MODEL_NAME]
+```
+Refer to JVET_AH0114 and subsequent documentation and [Reference software for CTC implementations](https://vcgit.hhi.fraunhofer.de/jvet-ahg-gfvc/gfvc_v1 ) and benchmark evaluation against other GFVC frameworks.
+---
 
+## 🙏 Attributions
+This codebase includes components adapted from the following projects:
 
-## Training
-Set the ```config/[MODEL_NAME].yaml``` parameters appropriately or use default (to reproduce our results) and run ```bash script_training.sh [MODEL_NAME]```. 
-The default setup uses a single GPU (NVIDIA-A100). However, training DAC, HDAC and RDAC can be trained on multiple GPUs by using distributed dataparallel and setting ```--device_ids``` parameter as desired.
+1. **[First Order Motion Model for Image Animation](https://papers.nips.cc/paper/8935-first-order-motion-model-for-image-animation)**: For the base architecture of deep image animation using unsupervised keypoints.
+2. **[CompressAI](https://github.com/InterDigitalInc/CompressAI)**: For learned image compression.
+3. **[JPEG-AI](https://gitlab.com/wg1/jpeg-ai/jpeg-ai-qaf)**: For evaluation metrics.
 
-## Testing
+---
 
-NOTE: ```baselines.yaml``` is used for HEVC, VVC and VVENC.
-Download the HEVC, VVC(VTM-12) from  [google-drive](https://drive.google.com/drive/folders/1KJELtQO_RvpFqu9YZYaXhyOksdbv9zWh?usp=sharing) and put them ```conventional_codecs/``` folder.
+## 📬 Contact
+For any questions, feedback, or collaboration opportunities, feel free to contact the maintainers or open an issue in this repository.
 
-Set the ```eval_params``` on the ```config/[MODEL_NAME].yaml``` file and run ```bash script_test.sh [MODEL_NAME]```.
+---
 
+## 🌟 Acknowledgments
+We appreciate the contributions of the research community that enabled this work. If you use this repository or find it helpful, please consider citing the relevant papers.
 
-### Attributions
-This code base  contains source code from the following works:
-1.  [First Order Motion Model for Image Animation](https://papers.nips.cc/paper/8935-first-order-motion-model-for-image-animation) for the base architecture of deep image animation with unsupervised keypoints.
-2. [Compressai](https://github.com/InterDigitalInc/CompressAI) for Learned image compression.
-3. [JPEG-AI](https://gitlab.com/wg1/jpeg-ai/jpeg-ai-qaf) for evaluation metrics.
+---
+
+### ⭐ Star This Repository
+If you find this project useful, give it a star on GitHub to support further development!
